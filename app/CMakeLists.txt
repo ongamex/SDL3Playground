@@ -6,7 +6,7 @@ set(SHADERS
 )
 
 add_executable(app main.cpp ${SHADERS})
-target_link_libraries(app SDL3-shared)
+target_link_libraries(app PUBLIC SDL3::SDL3)
 
 set_target_properties(app PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY $<TARGET_FILE_DIR:app>)
 
