@@ -28,7 +28,7 @@ foreach(SHADER ${SHADERS})
 endforeach()
 
 # SLang shaders:
-foreach(SHADER ${SHADERS})
+foreach(SHADER ${SHADERS_SLANG})
 	#cmake_path(GET ${CMAKE_CURRENT_LIST_DIR}/${SHADER}  FILENAME SHADER_FILE_NAME)
 
 	# Actual Spir-V that we re going to use.
