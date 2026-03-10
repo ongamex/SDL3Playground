@@ -108,12 +108,9 @@ bool SDL_InitPen(void)
 
 void SDL_QuitPen(void)
 {
+    SDL_RemoveAllPenDevices(NULL, NULL);
     SDL_DestroyRWLock(pen_device_rwlock);
-    pen_device_rwlock = 0;
-    SDL_free(pen_devices);
-    pen_devices = NULL;
-    pen_device_count = 0;
-    pen_touching = 0;
+    pen_device_rwlock = NULL;
 }
 
 #if 0 // not a public API at the moment.
@@ -194,6 +191,15 @@ SDL_PenInputFlags SDL_GetPenStatus(SDL_PenID instance_id, float *axes, int num_a
     return result;
 }
 
+SDL_PenDeviceType SDL_GetPenDeviceType(SDL_PenID instance_id)
+{
+    SDL_LockRWLockForReading(pen_device_rwlock);
+    const SDL_Pen *pen = FindPenByInstanceId(instance_id);
+    const SDL_PenDeviceType result = pen ? pen->info.device_type : SDL_PEN_DEVICE_TYPE_INVALID;
+    SDL_UnlockRWLock(pen_device_rwlock);
+    return result;
+}
+
 SDL_PenCapabilityFlags SDL_GetPenCapabilityFromAxis(SDL_PenAxis axis)
 {
     // the initial capability bits happen to match up, but as
@@ -204,7 +210,7 @@ SDL_PenCapabilityFlags SDL_GetPenCapabilityFromAxis(SDL_PenAxis axis)
     return 0;  // oh well.
 }
 
-SDL_PenID SDL_AddPenDevice(Uint64 timestamp, const char *name, const SDL_PenInfo *info, void *handle)
+SDL_PenID SDL_AddPenDevice(Uint64 timestamp, const char *name, SDL_Window *window, const SDL_PenInfo *info, void *handle, bool in_proximity)
 {
     SDL_assert(handle != NULL);  // just allocate a Uint8 so you have a unique pointer if not needed!
     SDL_assert(SDL_FindPenByHandle(handle) == 0);  // Backends shouldn't double-add pens!
@@ -242,23 +248,20 @@ SDL_PenID SDL_AddPenDevice(Uint64 timestamp, const char *name, const SDL_PenInfo
         SDL_free(namecpy);
     }
 
-    if (result && SDL_EventEnabled(SDL_EVENT_PEN_PROXIMITY_IN)) {
-        SDL_Event event;
-        SDL_zero(event);
-        event.pproximity.type = SDL_EVENT_PEN_PROXIMITY_IN;
-        event.pproximity.timestamp = timestamp;
-        event.pproximity.which = result;
-        SDL_PushEvent(&event);
+    if (result) {
+        SDL_SendPenProximity(timestamp, result, window, in_proximity);
     }
 
     return result;
 }
 
-void SDL_RemovePenDevice(Uint64 timestamp, SDL_PenID instance_id)
+void SDL_RemovePenDevice(Uint64 timestamp, SDL_Window *window, SDL_PenID instance_id)
 {
     if (!instance_id) {
         return;
     }
+
+    SDL_SendPenProximity(timestamp, instance_id, window, false);  // bye bye
 
     SDL_LockRWLockForWriting(pen_device_rwlock);
     SDL_Pen *pen = FindPenByInstanceId(instance_id);
@@ -285,15 +288,6 @@ void SDL_RemovePenDevice(Uint64 timestamp, SDL_PenID instance_id)
         }
     }
     SDL_UnlockRWLock(pen_device_rwlock);
-
-    if (pen && SDL_EventEnabled(SDL_EVENT_PEN_PROXIMITY_OUT)) {
-        SDL_Event event;
-        SDL_zero(event);
-        event.pproximity.type = SDL_EVENT_PEN_PROXIMITY_OUT;
-        event.pproximity.timestamp = timestamp;
-        event.pproximity.which = instance_id;
-        SDL_PushEvent(&event);
-    }
 }
 
 // This presumably is happening during video quit, so we don't send PROXIMITY_OUT events here.
@@ -303,12 +297,16 @@ void SDL_RemoveAllPenDevices(void (*callback)(SDL_PenID instance_id, void *handl
     if (pen_device_count > 0) {
         SDL_assert(pen_devices != NULL);
         for (int i = 0; i < pen_device_count; i++) {
-            callback(pen_devices[i].instance_id, pen_devices[i].driverdata, userdata);
+            if (callback) {
+                callback(pen_devices[i].instance_id, pen_devices[i].driverdata, userdata);
+            }
             SDL_free(pen_devices[i].name);
         }
     }
     SDL_free(pen_devices);
     pen_devices = NULL;
+    pen_device_count = 0;
+    pen_touching = 0;
     SDL_UnlockRWLock(pen_device_rwlock);
 }
 
@@ -341,7 +339,7 @@ void SDL_SendPenTouch(Uint64 timestamp, SDL_PenID instance_id, SDL_Window *windo
         if (eraser && ((input_state & SDL_PEN_INPUT_ERASER_TIP) == 0)) {
             input_state |= SDL_PEN_INPUT_ERASER_TIP;
             send_event = true;
-        } else if (!down && (input_state & SDL_PEN_INPUT_ERASER_TIP)) {
+        } else if (!eraser && (input_state & SDL_PEN_INPUT_ERASER_TIP)) {
             input_state &= ~SDL_PEN_INPUT_ERASER_TIP;
             send_event = true;
         }
@@ -503,7 +501,9 @@ void SDL_SendPenMotion(Uint64 timestamp, SDL_PenID instance_id, SDL_Window *wind
                     }
                 } else if (pen_touching == 0) {  // send mouse motion (without a pressed button) for pens that aren't touching.
                     // this might cause a little chaos if you have multiple pens hovering at the same time, but this seems unlikely in the real world, and also something you did to yourself.  :)
-                    SDL_SendMouseMotion(timestamp, window, SDL_PEN_MOUSEID, false, x, y);
+                    if (mouse->pen_mouse_events) {
+                        SDL_SendMouseMotion(timestamp, window, SDL_PEN_MOUSEID, false, x, y);
+                    }
                 }
             }
         }
@@ -560,13 +560,60 @@ void SDL_SendPenButton(Uint64 timestamp, SDL_PenID instance_id, SDL_Window *wind
             event.pbutton.down = down;
             SDL_PushEvent(&event);
 
-            if (window && (pen_touching == instance_id)) {
+            if (window && (!pen_touching || (pen_touching == instance_id))) {
                 SDL_Mouse *mouse = SDL_GetMouse();
                 if (mouse && mouse->pen_mouse_events) {
-                    SDL_SendMouseButton(timestamp, window, SDL_PEN_MOUSEID, button + 1, down);
+                    static const Uint8 mouse_buttons[] = {
+                        SDL_BUTTON_LEFT,
+                        SDL_BUTTON_RIGHT,
+                        SDL_BUTTON_MIDDLE,
+                        SDL_BUTTON_X1,
+                        SDL_BUTTON_X2
+                    };
+                    if (button < SDL_arraysize(mouse_buttons)) {
+                        SDL_SendMouseButton(timestamp, window, SDL_PEN_MOUSEID, mouse_buttons[button], down);
+                    }
                 }
             }
         }
+    }
+}
+
+void SDL_SendPenProximity(Uint64 timestamp, SDL_PenID instance_id, SDL_Window *window, bool in)
+{
+    bool send_event = false;
+    SDL_PenInputFlags input_state = 0;
+
+    // note that this locks for _reading_ because the lock protects the
+    // pen_devices array from being reallocated from under us, not the data in it;
+    // we assume only one thread (in the backend) is modifying an individual pen at
+    // a time, so it can update input state cleanly here.
+    SDL_LockRWLockForReading(pen_device_rwlock);
+    SDL_Pen *pen = FindPenByInstanceId(instance_id);
+    if (pen) {
+        input_state = pen->input_state;
+        const bool in_proximity = ((input_state & SDL_PEN_INPUT_IN_PROXIMITY) != 0);
+        if (in_proximity != in) {
+            if (in) {
+                input_state |= SDL_PEN_INPUT_IN_PROXIMITY;
+            } else {
+                input_state &= ~SDL_PEN_INPUT_IN_PROXIMITY;
+            }
+            send_event = true;
+            pen->input_state = input_state;  // we could do an SDL_SetAtomicInt here if we run into trouble...
+        }
+    }
+    SDL_UnlockRWLock(pen_device_rwlock);
+
+    const Uint32 event_type = in ? SDL_EVENT_PEN_PROXIMITY_IN : SDL_EVENT_PEN_PROXIMITY_OUT;
+    if (send_event && SDL_EventEnabled(event_type)) {
+        SDL_Event event;
+        SDL_zero(event);
+        event.pproximity.type = event_type;
+        event.pproximity.timestamp = timestamp;
+        event.pproximity.windowID = window ? window->id : 0;
+        event.pproximity.which = instance_id;
+        SDL_PushEvent(&event);
     }
 }
 

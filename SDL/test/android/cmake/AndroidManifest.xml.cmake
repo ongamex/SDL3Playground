@@ -43,8 +43,9 @@
         android:roundIcon="@mipmap/sdl-test_round"
         android:label="@string/label"
         android:supportsRtl="true"
-        android:hardwareAccelerated="true"
-        tools:targetApi="31">
+        android:theme="@style/AppTheme"
+        android:enableOnBackInvokedCallback="false"
+        android:hardwareAccelerated="true">
         <activity
             android:name="@ANDROID_MANIFEST_PACKAGE@.SDLTestActivity"
             android:exported="true"

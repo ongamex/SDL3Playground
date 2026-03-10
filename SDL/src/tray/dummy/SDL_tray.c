@@ -21,7 +21,7 @@
 
 #include "SDL_internal.h"
 
-#ifndef SDL_PLATFORM_MACOS
+#ifdef SDL_TRAY_DUMMY
 
 #include "../SDL_tray_utils.h"
 
@@ -66,7 +66,7 @@ SDL_TrayMenu *SDL_GetTraySubmenu(SDL_TrayEntry *entry)
     return NULL;
 }
 
-const SDL_TrayEntry **SDL_GetTrayEntries(SDL_TrayMenu *menu, int *size)
+const SDL_TrayEntry **SDL_GetTrayEntries(SDL_TrayMenu *menu, int *count)
 {
     SDL_InvalidParamError("menu");
     return NULL;
@@ -140,4 +140,4 @@ void SDL_DestroyTray(SDL_Tray *tray)
 {
 }
 
-#endif // !SDL_PLATFORM_MACOS
+#endif // SDL_TRAY_DUMMY

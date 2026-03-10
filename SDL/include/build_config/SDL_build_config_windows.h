@@ -85,6 +85,7 @@ typedef unsigned int uintptr_t;
 #define HAVE_DXGI_H 1
 #define HAVE_XINPUT_H 1
 #if defined(_WIN32_MAXVER) && _WIN32_MAXVER >= 0x0A00  /* Windows 10 SDK */
+#define HAVE_DXGI1_5_H 1
 #define HAVE_DXGI1_6_H 1
 #define HAVE_WINDOWS_GAMING_INPUT_H 1
 #endif
@@ -111,6 +112,9 @@ typedef unsigned int uintptr_t;
 # define SDL_DISABLE_AVX 1
 #endif
 
+#define HAVE_STDARG_H 1
+#define HAVE_STDDEF_H 1
+
 /* This can be disabled to avoid C runtime dependencies and manifest requirements */
 #ifndef HAVE_LIBC
 #define HAVE_LIBC 1
@@ -122,8 +126,6 @@ typedef unsigned int uintptr_t;
 #define HAVE_LIMITS_H 1
 #define HAVE_MATH_H 1
 #define HAVE_SIGNAL_H 1
-#define HAVE_STDARG_H 1
-#define HAVE_STDDEF_H 1
 #define HAVE_STDIO_H 1
 #define HAVE_STDLIB_H 1
 #define HAVE_STRING_H 1
@@ -153,7 +155,6 @@ typedef unsigned int uintptr_t;
 #define HAVE_STRCMP 1
 #define HAVE_STRNCMP 1
 #define HAVE_STRPBRK 1
-#define HAVE_VSSCANF 1
 #define HAVE_VSNPRINTF 1
 #define HAVE_ACOS 1
 #define HAVE_ASIN 1
@@ -211,10 +212,7 @@ typedef unsigned int uintptr_t;
 #if _MSC_VER >= 1400
 #define HAVE__FSEEKI64 1
 #endif
-#endif    /* _MSC_VER */
-#else
-#define HAVE_STDARG_H 1
-#define HAVE_STDDEF_H 1
+#endif /* _MSC_VER */
 #endif
 
 /* Enable various audio drivers */

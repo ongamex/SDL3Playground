@@ -33,14 +33,26 @@
 #ifdef HAVE_STDIO_H
 #include <stdio.h>
 #endif
+#ifdef HAVE_STDLIB_H
+#include <stdlib.h>
+#endif
 
 #include <SDL3/SDL.h>
 #define SDL_MAIN_NOIMPL // don't drag in header-only implementation of SDL_main
 #include <SDL3/SDL_main.h>
+#include "../core/SDL_core_unsupported.h"
+#include "../video/SDL_video_unsupported.h"
 
 
 // These headers have system specific definitions, so aren't included above
 #include <SDL3/SDL_vulkan.h>
+
+#if defined(WIN32) || defined(_WIN32) || defined(SDL_PLATFORM_CYGWIN)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN 1
+#endif
+#include <windows.h>
+#endif
 
 /* This is the version of the dynamic API. This doesn't match the SDL version
    and should not change until there's been a major revamp in API/ABI.
@@ -76,7 +88,7 @@ static void SDL_InitDynamicAPI(void);
     }
 
 #define SDL_DYNAPI_VARARGS(_static, name, initcall)                                                                                       \
-    _static bool SDLCALL SDL_SetError##name(SDL_PRINTF_FORMAT_STRING const char *fmt, ...)                                            \
+    _static bool SDLCALL SDL_SetError##name(SDL_PRINTF_FORMAT_STRING const char *fmt, ...)                                                \
     {                                                                                                                                     \
         char buf[128], *str = buf;                                                                                                        \
         int result;                                                                                                                       \
@@ -88,7 +100,7 @@ static void SDL_InitDynamicAPI(void);
         if (result >= 0 && (size_t)result >= sizeof(buf)) {                                                                               \
             str = NULL;                                                                                                                   \
             va_start(ap, fmt);                                                                                                            \
-            result = jump_table.SDL_vasprintf(&str, fmt, ap);                                                                                        \
+            result = jump_table.SDL_vasprintf(&str, fmt, ap);                                                                             \
             va_end(ap);                                                                                                                   \
         }                                                                                                                                 \
         if (result >= 0) {                                                                                                                \
@@ -97,7 +109,7 @@ static void SDL_InitDynamicAPI(void);
         if (str != buf) {                                                                                                                 \
             jump_table.SDL_free(str);                                                                                                     \
         }                                                                                                                                 \
-        return false;                                                                                                                 \
+        return false;                                                                                                                     \
     }                                                                                                                                     \
     _static int SDLCALL SDL_sscanf##name(const char *buf, SDL_SCANF_FORMAT_STRING const char *fmt, ...)                                   \
     {                                                                                                                                     \
@@ -139,7 +151,7 @@ static void SDL_InitDynamicAPI(void);
         va_end(ap);                                                                                                                       \
         return result;                                                                                                                    \
     }                                                                                                                                     \
-    _static size_t SDLCALL SDL_IOprintf##name(SDL_IOStream *context, SDL_PRINTF_FORMAT_STRING const char *fmt, ...)                          \
+    _static size_t SDLCALL SDL_IOprintf##name(SDL_IOStream *context, SDL_PRINTF_FORMAT_STRING const char *fmt, ...)                       \
     {                                                                                                                                     \
         size_t result;                                                                                                                    \
         va_list ap;                                                                                                                       \
@@ -189,7 +201,7 @@ static void SDL_InitDynamicAPI(void);
         jump_table.SDL_LogMessageV(category, priority, fmt, ap);                                                                          \
         va_end(ap);                                                                                                                       \
     }                                                                                                                                     \
-    SDL_DYNAPI_VARARGS_LOGFN(_static, name, initcall, Trace, TRACE)                                                                   \
+    SDL_DYNAPI_VARARGS_LOGFN(_static, name, initcall, Trace, TRACE)                                                                       \
     SDL_DYNAPI_VARARGS_LOGFN(_static, name, initcall, Verbose, VERBOSE)                                                                   \
     SDL_DYNAPI_VARARGS_LOGFN(_static, name, initcall, Debug, DEBUG)                                                                       \
     SDL_DYNAPI_VARARGS_LOGFN(_static, name, initcall, Info, INFO)                                                                         \
@@ -309,6 +321,30 @@ static size_t SDLCALL SDL_IOprintf_LOGSDLCALLS(SDL_IOStream *context, SDL_PRINTF
     va_end(ap);
     return result;
 }
+static bool SDLCALL SDL_RenderDebugTextFormat_LOGSDLCALLS(SDL_Renderer *renderer, float x, float y, SDL_PRINTF_FORMAT_STRING const char *fmt, ...)
+{
+    char buf[128], *str = buf;
+    int result;
+    va_list ap;
+    SDL_Log_REAL("SDL3CALL SDL_RenderDebugTextFormat");
+    va_start(ap, fmt);
+    result = jump_table.SDL_vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (result >= 0 && (size_t)result >= sizeof(buf)) {
+        str = NULL;
+        va_start(ap, fmt);
+        result = SDL_vasprintf_REAL(&str, fmt, ap);
+        va_end(ap);
+    }
+    bool retval = false;
+    if (result >= 0) {
+        retval = SDL_RenderDebugTextFormat_REAL(renderer, x, y, "%s", str);
+    }
+    if (str != buf) {
+        jump_table.SDL_free(str);
+    }
+    return retval;
+}
 static void SDLCALL SDL_Log_LOGSDLCALLS(SDL_PRINTF_FORMAT_STRING const char *fmt, ...)
 {
     va_list ap;
@@ -414,10 +450,6 @@ Sint32 SDL_DYNAPI_entry(Uint32 apiver, void *table, Uint32 tablesize)
 // Obviously we can't use SDL_LoadObject() to load SDL.  :)
 // Also obviously, we never close the loaded library.
 #if defined(WIN32) || defined(_WIN32) || defined(SDL_PLATFORM_CYGWIN)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN 1
-#endif
-#include <windows.h>
 static SDL_INLINE void *get_sdlapi_entry(const char *fname, const char *sym)
 {
     HMODULE lib = LoadLibraryA(fname);
@@ -470,16 +502,22 @@ static void dynapi_warn(const char *msg)
 extern "C" {
 #endif
 extern SDL_NORETURN void SDL_ExitProcess(int exitcode);
-#ifdef __WATCOMC__
-#pragma aux SDL_ExitProcess aborts;
-#endif
 #ifdef __cplusplus
 }
 #endif
 
 static void SDL_InitDynamicAPILocked(void)
 {
-    const char *libname = SDL_getenv_unsafe_REAL(SDL_DYNAMIC_API_ENVVAR);
+    // this can't use SDL_getenv_unsafe_REAL, because it might allocate memory before the app can set their allocator.
+#if defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
+    // We've always used LoadLibraryA for this, so this has never worked with Unicode paths on Windows. Sorry.
+    char envbuf[512];  // overflows will just report as environment variable being unset, but LoadLibraryA has a MAX_PATH of 260 anyhow, apparently.
+    const DWORD rc = GetEnvironmentVariableA(SDL_DYNAMIC_API_ENVVAR, envbuf, (DWORD) sizeof (envbuf));
+    char *libname = ((rc != 0) && (rc < sizeof (envbuf))) ? envbuf : NULL;
+#else
+    char *libname = getenv(SDL_DYNAMIC_API_ENVVAR); // This should NOT be SDL_getenv()
+#endif
+
     SDL_DYNAPI_ENTRYFN entry = NULL; // funcs from here by default.
     bool use_internal = true;
 

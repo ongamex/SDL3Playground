@@ -34,6 +34,8 @@
 
 #if defined(__SIZEOF_WCHAR_T__)
 #define SDL_SIZEOF_WCHAR_T __SIZEOF_WCHAR_T__
+#elif defined(SDL_PLATFORM_NGAGE)
+#define SDL_SIZEOF_WCHAR_T 2
 #elif defined(SDL_PLATFORM_WINDOWS)
 #define SDL_SIZEOF_WCHAR_T 2
 #else  // assume everything else is UTF-32 (add more tests if compiler-assert fails below!)
@@ -368,14 +370,12 @@ static size_t SDL_ScanUnsignedLongLongInternal(const char *text, int count, int 
             negative = *text == '-';
             ++text;
         }
-        if ((radix == 0 || radix == 16) && *text == '0' && text[1] != '\0') {
+        if ((radix == 0 || radix == 16) && *text == '0' && (text[1] == 'x' || text[1] == 'X')) {
+            text += 2;
+            radix = 16;
+        } else if (radix == 0 && *text == '0' && (text[1] >= '0' && text[1] <= '9')) {
             ++text;
-            if (*text == 'x' || *text == 'X') {
-                radix = 16;
-                ++text;
-            } else if (radix == 0) {
-                radix = 8;
-            }
+            radix = 8;
         } else if (radix == 0) {
             radix = 10;
         }
@@ -462,14 +462,12 @@ static size_t SDL_ScanUnsignedLongLongInternalW(const wchar_t *text, int count, 
             negative = *text == '-';
             ++text;
         }
-        if ((radix == 0 || radix == 16) && *text == '0') {
+        if ((radix == 0 || radix == 16) && *text == '0' && (text[1] == 'x' || text[1] == 'X')) {
+            text += 2;
+            radix = 16;
+        } else if (radix == 0 && *text == '0' && (text[1] >= '0' && text[1] <= '9')) {
             ++text;
-            if (*text == 'x' || *text == 'X') {
-                radix = 16;
-                ++text;
-            } else if (radix == 0) {
-                radix = 8;
-            }
+            radix = 8;
         } else if (radix == 0) {
             radix = 10;
         }
@@ -1448,6 +1446,7 @@ static bool CharacterMatchesSet(char c, const char *set, size_t set_len)
 // NOLINTNEXTLINE(readability-non-const-parameter)
 int SDL_vsscanf(const char *text, SDL_SCANF_FORMAT_STRING const char *fmt, va_list ap)
 {
+    const char *start = text;
     int result = 0;
 
     if (!text || !*text) {
@@ -1718,6 +1717,36 @@ int SDL_vsscanf(const char *text, SDL_SCANF_FORMAT_STRING const char *fmt, va_li
                     }
                     done = true;
                     break;
+                case 'n':
+                    switch (inttype) {
+                    case DO_SHORT:
+                    {
+                        short *valuep = va_arg(ap, short *);
+                        *valuep = (short)(text - start);
+                    } break;
+                    case DO_INT:
+                    {
+                        int *valuep = va_arg(ap, int *);
+                        *valuep = (int)(text - start);
+                    } break;
+                    case DO_LONG:
+                    {
+                        long *valuep = va_arg(ap, long *);
+                        *valuep = (long)(text - start);
+                    } break;
+                    case DO_LONGLONG:
+                    {
+                        long long *valuep = va_arg(ap, long long *);
+                        *valuep = (long long)(text - start);
+                    } break;
+                    case DO_SIZE_T:
+                    {
+                        size_t *valuep = va_arg(ap, size_t *);
+                        *valuep = (size_t)(text - start);
+                    } break;
+                    }
+                    done = true;
+                    break;
                 case '[':
                 {
                     const char *set = fmt + 1;
@@ -1801,24 +1830,7 @@ int SDL_swprintf(SDL_OUT_Z_CAP(maxlen) wchar_t *text, size_t maxlen, SDL_PRINTF_
     return result;
 }
 
-#if defined(HAVE_LIBC) && defined(__WATCOMC__)
-// _vsnprintf() doesn't ensure nul termination
-int SDL_vsnprintf(SDL_OUT_Z_CAP(maxlen) char *text, size_t maxlen, const char *fmt, va_list ap)
-{
-    int result;
-    if (!fmt) {
-        fmt = "";
-    }
-    result = _vsnprintf(text, maxlen, fmt, ap);
-    if (maxlen > 0) {
-        text[maxlen - 1] = '\0';
-    }
-    if (result < 0) {
-        result = (int)maxlen;
-    }
-    return result;
-}
-#elif defined(HAVE_VSNPRINTF)
+#if defined(HAVE_VSNPRINTF)
 int SDL_vsnprintf(SDL_OUT_Z_CAP(maxlen) char *text, size_t maxlen, const char *fmt, va_list ap)
 {
     if (!fmt) {

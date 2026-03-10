@@ -93,7 +93,6 @@ static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOESFunc;
 #ifdef SDL_PLATFORM_WIN32
 static ID3D11Device *d3d11_device;
 static ID3D11DeviceContext *d3d11_context;
-static const GUID SDL_IID_ID3D11Resource = { 0xdc8e63f3, 0xd12b, 0x4952, { 0xb4, 0x7b, 0x5e, 0x45, 0x02, 0x6a, 0x86, 0x2d } };
 #endif
 static VulkanVideoContext *vulkan_context;
 struct SwsContextContainer
@@ -171,7 +170,7 @@ static bool CreateWindowAndRenderer(SDL_WindowFlags window_flags, const char *dr
         return false;
     }
 
-    SDL_Log("Created renderer %s\n", SDL_GetRendererName(renderer));
+    SDL_Log("Created renderer %s", SDL_GetRendererName(renderer));
 
 #ifdef HAVE_EGL
     if (useEGL) {
@@ -232,7 +231,7 @@ static SDL_Texture *CreateTexture(SDL_Renderer *r, unsigned char *data, unsigned
     SDL_Surface *surface;
     SDL_IOStream *src = SDL_IOFromConstMem(data, len);
     if (src) {
-        surface = SDL_LoadBMP_IO(src, true);
+        surface = SDL_LoadPNG_IO(src, true);
         if (surface) {
             /* Treat white as transparent */
             SDL_SetSurfaceColorKey(surface, true, SDL_MapSurfaceRGB(surface, 255, 255, 255));
@@ -377,9 +376,9 @@ static enum AVPixelFormat GetSupportedPixelFormat(AVCodecContext *s, const enum 
     }
 
     if (*p == AV_PIX_FMT_NONE) {
-        SDL_Log("Couldn't find a supported pixel format:\n");
+        SDL_Log("Couldn't find a supported pixel format:");
         for (p = pix_fmts; *p != AV_PIX_FMT_NONE; p++) {
-            SDL_Log("    %s\n", av_get_pix_fmt_name(*p));
+            SDL_Log("    %s", av_get_pix_fmt_name(*p));
         }
     }
 
@@ -395,7 +394,7 @@ static AVCodecContext *OpenVideoStream(AVFormatContext *ic, int stream, const AV
     int i;
     int result;
 
-    SDL_Log("Video stream: %s %dx%d\n", avcodec_get_name(codec->id), codecpar->width, codecpar->height);
+    SDL_Log("Video stream: %s %dx%d", avcodec_get_name(codec->id), codecpar->width, codecpar->height);
 
     context = avcodec_alloc_context3(NULL);
     if (!context) {
@@ -405,7 +404,7 @@ static AVCodecContext *OpenVideoStream(AVFormatContext *ic, int stream, const AV
 
     result = avcodec_parameters_to_context(context, ic->streams[stream]->codecpar);
     if (result < 0) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "avcodec_parameters_to_context failed: %s\n", av_err2str(result));
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "avcodec_parameters_to_context failed: %s", av_err2str(result));
         avcodec_free_context(&context);
         return NULL;
     }
@@ -416,7 +415,7 @@ static AVCodecContext *OpenVideoStream(AVFormatContext *ic, int stream, const AV
     while (!context->hw_device_ctx &&
            (config = avcodec_get_hw_config(codec, i++)) != NULL) {
 #if 0
-        SDL_Log("Found %s hardware acceleration with pixel format %s\n", av_hwdevice_get_type_name(config->device_type), av_get_pix_fmt_name(config->pix_fmt));
+        SDL_Log("Found %s hardware acceleration with pixel format %s", av_hwdevice_get_type_name(config->device_type), av_get_pix_fmt_name(config->pix_fmt));
 #endif
 
         if (!(config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) ||
@@ -440,7 +439,7 @@ static AVCodecContext *OpenVideoStream(AVFormatContext *ic, int stream, const AV
             if (result < 0) {
                 SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create %s hardware device context: %s", av_hwdevice_get_type_name(config->device_type), av_err2str(result));
             } else {
-                SDL_Log("Using %s hardware acceleration with pixel format %s\n", av_hwdevice_get_type_name(config->device_type), av_get_pix_fmt_name(config->pix_fmt));
+                SDL_Log("Using %s hardware acceleration with pixel format %s", av_hwdevice_get_type_name(config->device_type), av_get_pix_fmt_name(config->pix_fmt));
             }
         } else
 #endif
@@ -456,14 +455,14 @@ static AVCodecContext *OpenVideoStream(AVFormatContext *ic, int stream, const AV
             if (result < 0) {
                 SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create %s hardware device context: %s", av_hwdevice_get_type_name(config->device_type), av_err2str(result));
             } else {
-                SDL_Log("Using %s hardware acceleration with pixel format %s\n", av_hwdevice_get_type_name(config->device_type), av_get_pix_fmt_name(config->pix_fmt));
+                SDL_Log("Using %s hardware acceleration with pixel format %s", av_hwdevice_get_type_name(config->device_type), av_get_pix_fmt_name(config->pix_fmt));
             }
         } else {
             result = av_hwdevice_ctx_create(&context->hw_device_ctx, config->device_type, NULL, NULL, 0);
             if (result < 0) {
                 SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create %s hardware device context: %s", av_hwdevice_get_type_name(config->device_type), av_err2str(result));
             } else {
-                SDL_Log("Using %s hardware acceleration with pixel format %s\n", av_hwdevice_get_type_name(config->device_type), av_get_pix_fmt_name(config->pix_fmt));
+                SDL_Log("Using %s hardware acceleration with pixel format %s", av_hwdevice_get_type_name(config->device_type), av_get_pix_fmt_name(config->pix_fmt));
             }
         }
     }
@@ -498,7 +497,7 @@ static SDL_Colorspace GetFrameColorspace(AVFrame *frame)
 
     if (frame && frame->colorspace != AVCOL_SPC_RGB) {
 #ifdef DEBUG_COLORSPACE
-        SDL_Log("Frame colorspace: range: %d, primaries: %d, trc: %d, colorspace: %d, chroma_location: %d\n", frame->color_range, frame->color_primaries, frame->color_trc, frame->colorspace, frame->chroma_location);
+        SDL_Log("Frame colorspace: range: %d, primaries: %d, trc: %d, colorspace: %d, chroma_location: %d", frame->color_range, frame->color_primaries, frame->color_trc, frame->colorspace, frame->chroma_location);
 #endif
         colorspace = SDL_DEFINE_COLORSPACE(SDL_COLOR_TYPE_YCBCR,
                                            frame->color_range,
@@ -731,7 +730,7 @@ static bool GetNV12TextureForDRMFrame(AVFrame *frame, SDL_Texture **texture)
 
             EGLImage image = eglCreateImage(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attr);
             if (image == EGL_NO_IMAGE) {
-                SDL_Log("Couldn't create image: %d\n", glGetError());
+                SDL_Log("Couldn't create image: %d", glGetError());
                 return false;
             }
 
@@ -916,7 +915,7 @@ static bool GetOESTextureForDRMFrame(AVFrame *frame, SDL_Texture **texture)
 
     EGLImage image = eglCreateImage(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attr);
     if (image == EGL_NO_IMAGE) {
-        SDL_Log("Couldn't create image: %d\n", glGetError());
+        SDL_Log("Couldn't create image: %d", glGetError());
         return false;
     }
 
@@ -925,7 +924,7 @@ static bool GetOESTextureForDRMFrame(AVFrame *frame, SDL_Texture **texture)
     glEGLImageTargetTexture2DOESFunc(GL_TEXTURE_EXTERNAL_OES, image);
     return true;
 }
-#endif // HAVE_EGL
+#endif /* HAVE_EGL */
 
 static bool GetTextureForDRMFrame(AVFrame *frame, SDL_Texture **texture)
 {
@@ -1082,7 +1081,7 @@ static void DisplayVideoTexture(AVFrame *frame)
 {
     /* Update the video texture */
     if (!GetTextureForFrame(frame, &video_texture)) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't get texture for frame: %s\n", SDL_GetError());
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't get texture for frame: %s", SDL_GetError());
         return;
     }
 
@@ -1138,17 +1137,17 @@ static AVCodecContext *OpenAudioStream(AVFormatContext *ic, int stream, const AV
     AVCodecContext *context;
     int result;
 
-    SDL_Log("Audio stream: %s %d channels, %d Hz\n", avcodec_get_name(codec->id), codecpar->ch_layout.nb_channels, codecpar->sample_rate);
+    SDL_Log("Audio stream: %s %d channels, %d Hz", avcodec_get_name(codec->id), codecpar->ch_layout.nb_channels, codecpar->sample_rate);
 
     context = avcodec_alloc_context3(NULL);
     if (!context) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "avcodec_alloc_context3 failed\n");
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "avcodec_alloc_context3 failed");
         return NULL;
     }
 
     result = avcodec_parameters_to_context(context, ic->streams[stream]->codecpar);
     if (result < 0) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "avcodec_parameters_to_context failed: %s\n", av_err2str(result));
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "avcodec_parameters_to_context failed: %s", av_err2str(result));
         avcodec_free_context(&context);
         return NULL;
     }
@@ -1459,7 +1458,7 @@ int main(int argc, char *argv[])
     }
 
     /* Create the sprite */
-    sprite = CreateTexture(renderer, icon_bmp, icon_bmp_len, &sprite_w, &sprite_h);
+    sprite = CreateTexture(renderer, icon_png, icon_png_len, &sprite_w, &sprite_h);
 
     if (!sprite) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create texture (%s)", SDL_GetError());
@@ -1471,7 +1470,7 @@ int main(int argc, char *argv[])
     positions = (SDL_FRect *)SDL_malloc(num_sprites * sizeof(*positions));
     velocities = (SDL_FRect *)SDL_malloc(num_sprites * sizeof(*velocities));
     if (!positions || !velocities) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Out of memory!\n");
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Out of memory!");
         return_code = 3;
         goto quit;
     }
@@ -1510,7 +1509,7 @@ int main(int argc, char *argv[])
         if (!flushing) {
             result = av_read_frame(ic, pkt);
             if (result < 0) {
-                SDL_Log("End of stream, finishing decode\n");
+                SDL_Log("End of stream, finishing decode");
                 if (audio_context) {
                     avcodec_flush_buffers(audio_context);
                 }

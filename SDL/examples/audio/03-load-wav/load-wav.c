@@ -1,5 +1,5 @@
 /*
- * This example code creates an simple audio stream for playing sound, and
+ * This example code creates a simple audio stream for playing sound, and
  * loads a .wav file that is pushed through the stream in a loop.
  *
  * This code is public domain. Feel free to use it for any purpose!
@@ -39,10 +39,11 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
     }
 
     /* we don't _need_ a window for audio-only things but it's good policy to have one. */
-    if (!SDL_CreateWindowAndRenderer("examples/audio/load-wav", 640, 480, 0, &window, &renderer)) {
+    if (!SDL_CreateWindowAndRenderer("examples/audio/load-wav", 640, 480, SDL_WINDOW_RESIZABLE, &window, &renderer)) {
         SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
+    SDL_SetRenderLogicalPresentation(renderer, 640, 480, SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
     /* Load the .wav file from wherever the app is being run from. */
     SDL_asprintf(&wav_path, "%ssample.wav", SDL_GetBasePath());  /* allocate a string of the full file path */
@@ -82,7 +83,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
        We're being lazy here, but if there's less than the entire wav file left to play,
        just shove a whole copy of it into the queue, so we always have _tons_ of
        data queued for playback. */
-    if (SDL_GetAudioStreamAvailable(stream) < (int)wav_data_len) {
+    if (SDL_GetAudioStreamQueued(stream) < (int)wav_data_len) {
         /* feed more data to the stream. It will queue at the end, and trickle out as the hardware needs more data. */
         SDL_PutAudioStreamData(stream, wav_data, wav_data_len);
     }

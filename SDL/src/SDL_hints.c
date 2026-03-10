@@ -22,6 +22,10 @@
 
 #include "SDL_hints_c.h"
 
+#ifdef SDL_PLATFORM_ANDROID
+#include "core/android/SDL_android.h"
+#endif
+
 typedef struct SDL_HintWatch
 {
     SDL_HintCallback callback;
@@ -83,7 +87,7 @@ static void SDLCALL CleanupHintProperty(void *userdata, void *value)
     SDL_free(hint);
 }
 
-static const char* GetHintEnvironmentVariable(const char *name)
+static const char *GetHintEnvironmentVariable(const char *name)
 {
     const char *result = SDL_getenv(name);
     if (!result && name && *name) {
@@ -100,7 +104,7 @@ static const char* GetHintEnvironmentVariable(const char *name)
 
 bool SDL_SetHintWithPriority(const char *name, const char *value, SDL_HintPriority priority)
 {
-    if (!name || !*name) {
+    CHECK_PARAM(!name || !*name) {
         return SDL_InvalidParamError("name");
     }
 
@@ -147,6 +151,13 @@ bool SDL_SetHintWithPriority(const char *name, const char *value, SDL_HintPriori
         }
     }
 
+#ifdef SDL_PLATFORM_ANDROID
+    if (SDL_strcmp(name, SDL_HINT_ANDROID_ALLOW_RECREATE_ACTIVITY) == 0) {
+        // Special handling for this hint, which needs to persist outside the normal application flow
+        Android_SetAllowRecreateActivity(SDL_GetStringBoolean(value, false));
+    }
+#endif // SDL_PLATFORM_ANDROID
+
     SDL_UnlockProperties(hints);
 
     return result;
@@ -154,7 +165,7 @@ bool SDL_SetHintWithPriority(const char *name, const char *value, SDL_HintPriori
 
 bool SDL_ResetHint(const char *name)
 {
-    if (!name || !*name) {
+    CHECK_PARAM(!name || !*name) {
         return SDL_InvalidParamError("name");
     }
 
@@ -185,6 +196,17 @@ bool SDL_ResetHint(const char *name)
         result = true;
     }
 
+#ifdef SDL_PLATFORM_ANDROID
+    if (SDL_strcmp(name, SDL_HINT_ANDROID_ALLOW_RECREATE_ACTIVITY) == 0) {
+        // Special handling for this hint, which needs to persist outside the normal application flow
+        if (env) {
+            Android_SetAllowRecreateActivity(SDL_GetStringBoolean(env, false));
+        } else {
+            Android_SetAllowRecreateActivity(false);
+        }
+    }
+#endif // SDL_PLATFORM_ANDROID
+
     SDL_UnlockProperties(hints);
 
     return result;
@@ -210,6 +232,17 @@ static void SDLCALL ResetHintsCallback(void *userdata, SDL_PropertiesID hints, c
     SDL_free(hint->value);
     hint->value = NULL;
     hint->priority = SDL_HINT_DEFAULT;
+
+#ifdef SDL_PLATFORM_ANDROID
+    if (SDL_strcmp(name, SDL_HINT_ANDROID_ALLOW_RECREATE_ACTIVITY) == 0) {
+        // Special handling for this hint, which needs to persist outside the normal application flow
+        if (env) {
+            Android_SetAllowRecreateActivity(SDL_GetStringBoolean(env, false));
+        } else {
+            Android_SetAllowRecreateActivity(false);
+        }
+    }
+#endif // SDL_PLATFORM_ANDROID
 }
 
 void SDL_ResetHints(void)
@@ -283,9 +316,10 @@ bool SDL_GetHintBoolean(const char *name, bool default_value)
 
 bool SDL_AddHintCallback(const char *name, SDL_HintCallback callback, void *userdata)
 {
-    if (!name || !*name) {
+    CHECK_PARAM(!name || !*name) {
         return SDL_InvalidParamError("name");
-    } else if (!callback) {
+    }
+    CHECK_PARAM(!callback) {
         return SDL_InvalidParamError("callback");
     }
 

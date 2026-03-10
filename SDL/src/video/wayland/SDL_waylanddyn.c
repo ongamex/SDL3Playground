@@ -28,6 +28,45 @@
 
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC
 
+SDL_ELF_NOTE_DLOPEN(
+    "wayland",
+    "Support for Wayland video",
+    SDL_ELF_NOTE_DLOPEN_PRIORITY_SUGGESTED,
+    SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC
+)
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_EGL
+SDL_ELF_NOTE_DLOPEN(
+    "wayland",
+    "Support for Wayland video",
+    SDL_ELF_NOTE_DLOPEN_PRIORITY_SUGGESTED,
+    SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_EGL
+)
+#endif
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_CURSOR
+SDL_ELF_NOTE_DLOPEN(
+    "wayland",
+    "Support for Wayland video",
+    SDL_ELF_NOTE_DLOPEN_PRIORITY_SUGGESTED,
+    SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_CURSOR
+)
+#endif
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_XKBCOMMON
+SDL_ELF_NOTE_DLOPEN(
+    "wayland",
+    "Support for Wayland video",
+    SDL_ELF_NOTE_DLOPEN_PRIORITY_SUGGESTED,
+    SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_XKBCOMMON
+)
+#endif
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_LIBDECOR
+SDL_ELF_NOTE_DLOPEN(
+    "wayland",
+    "Support for Wayland video",
+    SDL_ELF_NOTE_DLOPEN_PRIORITY_SUGGESTED,
+    SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_LIBDECOR
+)
+#endif
+
 typedef struct
 {
     SDL_SharedObject *lib;
@@ -66,9 +105,9 @@ static void *WAYLAND_GetSym(const char *fnname, int *pHasModule, bool required)
 
 #if DEBUG_DYNAMIC_WAYLAND
     if (fn) {
-        SDL_Log("WAYLAND: Found '%s' in %s (%p)\n", fnname, dynlib->libname, fn);
+        SDL_Log("WAYLAND: Found '%s' in %s (%p)", fnname, dynlib->libname, fn);
     } else {
-        SDL_Log("WAYLAND: Symbol '%s' NOT FOUND!\n", fnname);
+        SDL_Log("WAYLAND: Symbol '%s' NOT FOUND!", fnname);
     }
 #endif
 

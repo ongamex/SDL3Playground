@@ -32,6 +32,9 @@
 #include <unistd.h>
 #include <linux/videodev2.h>
 
+#ifndef V4L2_PIX_FMT_RGBX32
+#define V4L2_PIX_FMT_RGBX32 v4l2_fourcc('X','B','2','4')
+#endif
 #ifndef V4L2_CAP_DEVICE_CAPS
 // device_caps was added to struct v4l2_capability as of kernel 3.4.
 #define device_caps reserved[0]
@@ -122,16 +125,17 @@ static bool V4L2_WaitDevice(SDL_Camera *device)
     return false;
 }
 
-static SDL_CameraFrameResult V4L2_AcquireFrame(SDL_Camera *device, SDL_Surface *frame, Uint64 *timestampNS)
+static SDL_CameraFrameResult V4L2_AcquireFrame(SDL_Camera *device, SDL_Surface *frame, Uint64 *timestampNS, float *rotation)
 {
     const int fd = device->hidden->fd;
     const io_method io = device->hidden->io;
     size_t size = device->hidden->buffers[0].length;
     struct v4l2_buffer buf;
+    ssize_t amount;
 
     switch (io) {
         case IO_METHOD_READ:
-            if (read(fd, device->hidden->buffers[0].start, size) == -1) {
+            if ((amount = read(fd, device->hidden->buffers[0].start, size)) == -1) {
                 switch (errno) {
                 case EAGAIN:
                     return SDL_CAMERA_FRAME_SKIP;
@@ -148,7 +152,11 @@ static SDL_CameraFrameResult V4L2_AcquireFrame(SDL_Camera *device, SDL_Surface *
 
             *timestampNS = SDL_GetTicksNS();  // oh well, close enough.
             frame->pixels = device->hidden->buffers[0].start;
-            frame->pitch = device->hidden->driver_pitch;
+            if (device->hidden->driver_pitch) {
+                frame->pitch = device->hidden->driver_pitch;
+            } else {
+                frame->pitch = (int)amount;
+            }
             break;
 
         case IO_METHOD_MMAP:
@@ -178,13 +186,17 @@ static SDL_CameraFrameResult V4L2_AcquireFrame(SDL_Camera *device, SDL_Surface *
             }
 
             frame->pixels = device->hidden->buffers[buf.index].start;
-            frame->pitch = device->hidden->driver_pitch;
+            if (device->hidden->driver_pitch) {
+                frame->pitch = device->hidden->driver_pitch;
+            } else {
+                frame->pitch = buf.bytesused;
+            }
             device->hidden->buffers[buf.index].available = 1;
 
             *timestampNS = (((Uint64) buf.timestamp.tv_sec) * SDL_NS_PER_SECOND) + SDL_US_TO_NS(buf.timestamp.tv_usec);
 
             #if DEBUG_CAMERA
-            SDL_Log("CAMERA: debug mmap: image %d/%d  data[0]=%p", buf.index, device->hidden->nb_buffers, (void*)frame->pixels);
+            SDL_Log("CAMERA: debug mmap: image %d/%d  data[0]=%p", buf.index, device->hidden->nb_buffers, (void *)frame->pixels);
             #endif
             break;
 
@@ -221,14 +233,18 @@ static SDL_CameraFrameResult V4L2_AcquireFrame(SDL_Camera *device, SDL_Surface *
                 return SDL_CAMERA_FRAME_ERROR;
             }
 
-            frame->pixels = (void*)buf.m.userptr;
-            frame->pitch = device->hidden->driver_pitch;
+            frame->pixels = (void *)buf.m.userptr;
+            if (device->hidden->driver_pitch) {
+                frame->pitch = device->hidden->driver_pitch;
+            } else {
+                frame->pitch = buf.bytesused;
+            }
             device->hidden->buffers[i].available = 1;
 
             *timestampNS = (((Uint64) buf.timestamp.tv_sec) * SDL_NS_PER_SECOND) + SDL_US_TO_NS(buf.timestamp.tv_usec);
 
             #if DEBUG_CAMERA
-            SDL_Log("CAMERA: debug userptr: image %d/%d  data[0]=%p", buf.index, device->hidden->nb_buffers, (void*)frame->pixels);
+            SDL_Log("CAMERA: debug userptr: image %d/%d  data[0]=%p", buf.index, device->hidden->nb_buffers, (void *)frame->pixels);
             #endif
             break;
 
@@ -404,10 +420,16 @@ static void format_v4l2_to_sdl(Uint32 fmt, SDL_PixelFormat *format, SDL_Colorspa
     switch (fmt) {
     #define CASE(x, y, z)  case x: *format = y; *colorspace = z; return
     CASE(V4L2_PIX_FMT_YUYV, SDL_PIXELFORMAT_YUY2, SDL_COLORSPACE_BT709_LIMITED);
+    CASE(V4L2_PIX_FMT_MJPEG, SDL_PIXELFORMAT_MJPG, SDL_COLORSPACE_SRGB);
+    CASE(V4L2_PIX_FMT_RGBX32, SDL_PIXELFORMAT_RGBX32, SDL_COLORSPACE_SRGB);
     #undef CASE
     default:
         #if DEBUG_CAMERA
-        SDL_Log("CAMERA: Unknown format V4L2_PIX_FORMAT '%d'", fmt);
+        SDL_Log("CAMERA: Unknown format V4L2_PIX_FORMAT '%c%c%c%c' (0x%x)",
+            (char)(Uint8)(fmt >>  0),
+            (char)(Uint8)(fmt >>  8),
+            (char)(Uint8)(fmt >> 16),
+            (char)(Uint8)(fmt >> 24), fmt);
         #endif
         break;
     }
@@ -420,10 +442,11 @@ static Uint32 format_sdl_to_v4l2(SDL_PixelFormat fmt)
     switch (fmt) {
         #define CASE(y, x)  case x: return y
         CASE(V4L2_PIX_FMT_YUYV, SDL_PIXELFORMAT_YUY2);
-        CASE(V4L2_PIX_FMT_MJPEG, SDL_PIXELFORMAT_UNKNOWN);
+        CASE(V4L2_PIX_FMT_MJPEG, SDL_PIXELFORMAT_MJPG);
+        CASE(V4L2_PIX_FMT_RGBX32, SDL_PIXELFORMAT_RGBX32);
         #undef CASE
         default:
-            return true;
+            return 0;
     }
 }
 
@@ -552,7 +575,7 @@ static bool V4L2_OpenDevice(SDL_Camera *device, const SDL_CameraSpec *spec)
         setfps.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         if (xioctl(fd, VIDIOC_G_PARM, &setfps) == 0) {
             if ( (setfps.parm.capture.timeperframe.denominator != spec->framerate_numerator) ||
-                 (setfps.parm.capture.timeperframe.numerator = spec->framerate_denominator) ) {
+                 (setfps.parm.capture.timeperframe.numerator != spec->framerate_denominator) ) {
                 setfps.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
                 setfps.parm.capture.timeperframe.numerator = spec->framerate_denominator;
                 setfps.parm.capture.timeperframe.denominator = spec->framerate_numerator;
@@ -778,7 +801,7 @@ static void MaybeAddDevice(const char *path)
                 const int stepw = (int) frmsizeenum.stepwise.step_width;
                 const int steph = (int) frmsizeenum.stepwise.step_height;
                 for (int w = minw; w <= maxw; w += stepw) {
-                    for (int h = minh; w <= maxh; w += steph) {
+                    for (int h = minh; h <= maxh; h += steph) {
                         #if DEBUG_CAMERA
                         SDL_Log("CAMERA:     * Has %s size %dx%d", (frmsizeenum.type == V4L2_FRMSIZE_TYPE_STEPWISE) ? "stepwise" : "continuous", w, h);
                         #endif

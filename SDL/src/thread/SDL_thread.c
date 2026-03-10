@@ -41,7 +41,7 @@ void *SDL_GetTLS(SDL_TLSID *id)
     SDL_TLSData *storage;
     int storage_index;
 
-    if (id == NULL) {
+    CHECK_PARAM(id == NULL) {
         SDL_InvalidParamError("id");
         return NULL;
     }
@@ -59,7 +59,7 @@ bool SDL_SetTLS(SDL_TLSID *id, const void *value, SDL_TLSDestructorCallback dest
     SDL_TLSData *storage;
     int storage_index;
 
-    if (id == NULL) {
+    CHECK_PARAM(id == NULL) {
         return SDL_InvalidParamError("id");
     }
 
@@ -80,6 +80,15 @@ bool SDL_SetTLS(SDL_TLSID *id, const void *value, SDL_TLSDestructorCallback dest
          * will have the same storage index for this id.
          */
         storage_index = SDL_GetAtomicInt(id) - 1;
+    } else {
+        // Make sure we don't allocate an ID clobbering this one
+        int tls_id = SDL_GetAtomicInt(&SDL_tls_id);
+        while (storage_index >= tls_id) {
+            if (SDL_CompareAndSwapAtomicInt(&SDL_tls_id, tls_id, storage_index + 1)) {
+                break;
+            }
+            tls_id = SDL_GetAtomicInt(&SDL_tls_id);
+        }
     }
 
     // Get the storage for the current thread
@@ -314,7 +323,7 @@ static bool ThreadValid(SDL_Thread *thread)
 void SDL_RunThread(SDL_Thread *thread)
 {
     void *userdata = thread->userdata;
-    int(SDLCALL * userfunc)(void *) = thread->userfunc;
+    int(SDLCALL *userfunc)(void *) = thread->userfunc;
 
     int *statusloc = &thread->status;
 
@@ -333,8 +342,7 @@ void SDL_RunThread(SDL_Thread *thread)
     // Mark us as ready to be joined (or detached)
     if (!SDL_CompareAndSwapAtomicInt(&thread->state, SDL_THREAD_ALIVE, SDL_THREAD_COMPLETE)) {
         // Clean up if something already detached us.
-        if (SDL_GetThreadState(thread) == SDL_THREAD_DETACHED) {
-            SDL_SetObjectValid(thread, SDL_OBJECT_TYPE_THREAD, false);
+        if (SDL_GetAtomicInt(&thread->state) == SDL_THREAD_DETACHED) {
             SDL_free(thread->name); // Can't free later, we've already cleaned up TLS
             SDL_free(thread);
         }
@@ -457,7 +465,7 @@ bool SDL_SetCurrentThreadPriority(SDL_ThreadPriority priority)
 
 void SDL_WaitThread(SDL_Thread *thread, int *status)
 {
-    if (!ThreadValid(thread) || SDL_GetThreadState(thread) == SDL_THREAD_DETACHED) {
+    if (!ThreadValid(thread)) {
         if (status) {
             *status = -1;
         }
@@ -490,6 +498,8 @@ void SDL_DetachThread(SDL_Thread *thread)
 
     // Grab dibs if the state is alive+joinable.
     if (SDL_CompareAndSwapAtomicInt(&thread->state, SDL_THREAD_ALIVE, SDL_THREAD_DETACHED)) {
+        // The thread may vanish at any time, it's no longer valid
+        SDL_SetObjectValid(thread, SDL_OBJECT_TYPE_THREAD, false);
         SDL_SYS_DetachThread(thread);
     } else {
         // all other states are pretty final, see where we landed.

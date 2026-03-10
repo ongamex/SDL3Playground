@@ -19,7 +19,7 @@
 
 #include <stdlib.h>
 
-#if defined(SDL_PLATFORM_IOS) || defined(SDL_PLATFORM_ANDROID) || defined(SDL_PLATFORM_EMSCRIPTEN) || defined(SDL_PLATFORM_WIN32) || defined(SDL_PLATFORM_LINUX)
+#if defined(SDL_PLATFORM_IOS) || defined(SDL_PLATFORM_ANDROID) || defined(SDL_PLATFORM_EMSCRIPTEN) || defined(SDL_PLATFORM_WIN32) || defined(SDL_PLATFORM_LINUX) || defined(SDL_PLATFORM_HURD)
 #define HAVE_OPENGLES2
 #endif
 
@@ -124,7 +124,7 @@ quit(int rc)
     {                                                                                       \
         GLenum glError = ctx.glGetError();                                                  \
         if (glError != GL_NO_ERROR) {                                                       \
-            SDL_Log("glGetError() = %i (0x%.8x) at line %i\n", glError, glError, __LINE__); \
+            SDL_Log("glGetError() = %i (0x%.8x) at line %i", glError, glError, __LINE__); \
             quit(1);                                                                        \
         }                                                                                   \
     }
@@ -179,7 +179,7 @@ perspective_matrix(float fovy, float aspect, float znear, float zfar, float *r)
     int i;
     float f;
 
-    f = 1.0f / SDL_tanf(fovy * 0.5f);
+    f = 1.0f / SDL_tanf((fovy / 180.0f) * SDL_PI_F * 0.5f);
 
     for (i = 0; i < 16; i++) {
         r[i] = 0.0;
@@ -551,7 +551,7 @@ render_window(int index)
     }
 
     if (!SDL_GL_MakeCurrent(state->windows[index], context[index])) {
-        SDL_Log("SDL_GL_MakeCurrent(): %s\n", SDL_GetError());
+        SDL_Log("SDL_GL_MakeCurrent(): %s", SDL_GetError());
         return;
     }
 
@@ -750,7 +750,7 @@ int main(int argc, char *argv[])
 
     context = (SDL_GLContext *)SDL_calloc(state->num_windows, sizeof(*context));
     if (!context) {
-        SDL_Log("Out of memory!\n");
+        SDL_Log("Out of memory!");
         quit(2);
     }
 
@@ -758,14 +758,14 @@ int main(int argc, char *argv[])
     for (i = 0; i < state->num_windows; i++) {
         context[i] = SDL_GL_CreateContext(state->windows[i]);
         if (!context[i]) {
-            SDL_Log("SDL_GL_CreateContext(): %s\n", SDL_GetError());
+            SDL_Log("SDL_GL_CreateContext(): %s", SDL_GetError());
             quit(2);
         }
     }
 
     /* Important: call this *after* creating the context */
     if (!LoadContext(&ctx)) {
-        SDL_Log("Could not load GLES2 functions\n");
+        SDL_Log("Could not load GLES2 functions");
         quit(2);
         return 0;
     }
@@ -773,61 +773,61 @@ int main(int argc, char *argv[])
     SDL_GL_SetSwapInterval(state->render_vsync);
 
     mode = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
-    SDL_Log("Threaded  : %s\n", threaded ? "yes" : "no");
+    SDL_Log("Threaded  : %s", threaded ? "yes" : "no");
     if (mode) {
-        SDL_Log("Screen bpp: %d\n", SDL_BITSPERPIXEL(mode->format));
-        SDL_Log("\n");
+        SDL_Log("Screen bpp: %d", SDL_BITSPERPIXEL(mode->format));
+        SDL_Log("%s", "");
     }
-    SDL_Log("Vendor     : %s\n", ctx.glGetString(GL_VENDOR));
-    SDL_Log("Renderer   : %s\n", ctx.glGetString(GL_RENDERER));
-    SDL_Log("Version    : %s\n", ctx.glGetString(GL_VERSION));
-    SDL_Log("Extensions : %s\n", ctx.glGetString(GL_EXTENSIONS));
-    SDL_Log("\n");
+    SDL_Log("Vendor     : %s", ctx.glGetString(GL_VENDOR));
+    SDL_Log("Renderer   : %s", ctx.glGetString(GL_RENDERER));
+    SDL_Log("Version    : %s", ctx.glGetString(GL_VERSION));
+    SDL_Log("Extensions : %s", ctx.glGetString(GL_EXTENSIONS));
+    SDL_Log("%s", "");
 
     if (SDL_GL_GetAttribute(SDL_GL_RED_SIZE, &value)) {
-        SDL_Log("SDL_GL_RED_SIZE: requested %d, got %d\n", 5, value);
+        SDL_Log("SDL_GL_RED_SIZE: requested %d, got %d", 5, value);
     } else {
-        SDL_Log("Failed to get SDL_GL_RED_SIZE: %s\n",
+        SDL_Log("Failed to get SDL_GL_RED_SIZE: %s",
                 SDL_GetError());
     }
     if (SDL_GL_GetAttribute(SDL_GL_GREEN_SIZE, &value)) {
-        SDL_Log("SDL_GL_GREEN_SIZE: requested %d, got %d\n", 5, value);
+        SDL_Log("SDL_GL_GREEN_SIZE: requested %d, got %d", 5, value);
     } else {
-        SDL_Log("Failed to get SDL_GL_GREEN_SIZE: %s\n",
+        SDL_Log("Failed to get SDL_GL_GREEN_SIZE: %s",
                 SDL_GetError());
     }
     if (SDL_GL_GetAttribute(SDL_GL_BLUE_SIZE, &value)) {
-        SDL_Log("SDL_GL_BLUE_SIZE: requested %d, got %d\n", 5, value);
+        SDL_Log("SDL_GL_BLUE_SIZE: requested %d, got %d", 5, value);
     } else {
-        SDL_Log("Failed to get SDL_GL_BLUE_SIZE: %s\n",
+        SDL_Log("Failed to get SDL_GL_BLUE_SIZE: %s",
                 SDL_GetError());
     }
     if (SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE, &value)) {
-        SDL_Log("SDL_GL_DEPTH_SIZE: requested %d, got %d\n", depth, value);
+        SDL_Log("SDL_GL_DEPTH_SIZE: requested %d, got %d", depth, value);
     } else {
-        SDL_Log("Failed to get SDL_GL_DEPTH_SIZE: %s\n",
+        SDL_Log("Failed to get SDL_GL_DEPTH_SIZE: %s",
                 SDL_GetError());
     }
     if (fsaa) {
         if (SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS, &value)) {
-            SDL_Log("SDL_GL_MULTISAMPLEBUFFERS: requested 1, got %d\n", value);
+            SDL_Log("SDL_GL_MULTISAMPLEBUFFERS: requested 1, got %d", value);
         } else {
-            SDL_Log("Failed to get SDL_GL_MULTISAMPLEBUFFERS: %s\n",
+            SDL_Log("Failed to get SDL_GL_MULTISAMPLEBUFFERS: %s",
                     SDL_GetError());
         }
         if (SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &value)) {
-            SDL_Log("SDL_GL_MULTISAMPLESAMPLES: requested %d, got %d\n", fsaa,
+            SDL_Log("SDL_GL_MULTISAMPLESAMPLES: requested %d, got %d", fsaa,
                     value);
         } else {
-            SDL_Log("Failed to get SDL_GL_MULTISAMPLESAMPLES: %s\n",
+            SDL_Log("Failed to get SDL_GL_MULTISAMPLESAMPLES: %s",
                     SDL_GetError());
         }
     }
     if (accel) {
         if (SDL_GL_GetAttribute(SDL_GL_ACCELERATED_VISUAL, &value)) {
-            SDL_Log("SDL_GL_ACCELERATED_VISUAL: requested 1, got %d\n", value);
+            SDL_Log("SDL_GL_ACCELERATED_VISUAL: requested 1, got %d", value);
         } else {
-            SDL_Log("Failed to get SDL_GL_ACCELERATED_VISUAL: %s\n",
+            SDL_Log("Failed to get SDL_GL_ACCELERATED_VISUAL: %s",
                     SDL_GetError());
         }
     }
@@ -839,7 +839,7 @@ int main(int argc, char *argv[])
 
         int w, h;
         if (!SDL_GL_MakeCurrent(state->windows[i], context[i])) {
-            SDL_Log("SDL_GL_MakeCurrent(): %s\n", SDL_GetError());
+            SDL_Log("SDL_GL_MakeCurrent(): %s", SDL_GetError());
 
             /* Continue for next window */
             continue;
@@ -880,13 +880,13 @@ int main(int argc, char *argv[])
         GL_CHECK(ctx.glGenBuffers(1, &data->position_buffer));
         GL_CHECK(ctx.glBindBuffer(GL_ARRAY_BUFFER, data->position_buffer));
         GL_CHECK(ctx.glBufferData(GL_ARRAY_BUFFER, sizeof(g_vertices), g_vertices, GL_STATIC_DRAW));
-        GL_CHECK(ctx.glVertexAttribPointer(data->attr_position, 3, GL_FLOAT, GL_FALSE, 0, 0));
+        GL_CHECK(ctx.glVertexAttribPointer(data->attr_position, 3, GL_FLOAT, GL_FALSE, 0, NULL));
         GL_CHECK(ctx.glBindBuffer(GL_ARRAY_BUFFER, 0));
 
         GL_CHECK(ctx.glGenBuffers(1, &data->color_buffer));
         GL_CHECK(ctx.glBindBuffer(GL_ARRAY_BUFFER, data->color_buffer));
         GL_CHECK(ctx.glBufferData(GL_ARRAY_BUFFER, sizeof(g_colors), g_colors, GL_STATIC_DRAW));
-        GL_CHECK(ctx.glVertexAttribPointer(data->attr_color, 3, GL_FLOAT, GL_FALSE, 0, 0));
+        GL_CHECK(ctx.glVertexAttribPointer(data->attr_color, 3, GL_FLOAT, GL_FALSE, 0, NULL));
         GL_CHECK(ctx.glBindBuffer(GL_ARRAY_BUFFER, 0));
 
         GL_CHECK(ctx.glEnable(GL_CULL_FACE));
@@ -936,7 +936,7 @@ int main(int argc, char *argv[])
     /* Print out some timing information */
     now = SDL_GetTicks();
     if (now > then) {
-        SDL_Log("%2.2f frames per second\n",
+        SDL_Log("%2.2f frames per second",
                 ((double)frames * 1000) / (now - then));
     }
 #ifndef SDL_PLATFORM_ANDROID
@@ -949,7 +949,7 @@ int main(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-    SDL_Log("No OpenGL ES support on this system\n");
+    SDL_Log("No OpenGL ES support on this system");
     return 1;
 }
 

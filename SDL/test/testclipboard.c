@@ -21,7 +21,7 @@ static SDL_Renderer *renderer = NULL;
 
 static const char *mime_types[] = {
     "text/plain",
-    "image/bmp",
+    "image/png",
 };
 
 static const void *ClipboardDataCallback(void *userdata, const char *mime_type, size_t *size)
@@ -30,10 +30,11 @@ static const void *ClipboardDataCallback(void *userdata, const char *mime_type, 
         const char *text = "Hello world!";
         *size = SDL_strlen(text);
         return text;
-    } else if (SDL_strcmp(mime_type, "image/bmp") == 0) {
-        *size = icon_bmp_len;
-        return icon_bmp;
+    } else if (SDL_strcmp(mime_type, "image/png") == 0) {
+        *size = icon_png_len;
+        return icon_png;
     } else {
+        SDL_Log("Called with unexpected mime type: %s", mime_type);
         return NULL;
     }
 }
@@ -41,12 +42,12 @@ static const void *ClipboardDataCallback(void *userdata, const char *mime_type, 
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
-        SDL_Log("Couldn't initialize SDL: %s\n", SDL_GetError());
+        SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
-    if (!SDL_CreateWindowAndRenderer("testclipboard", 640, 480, 0, &window, &renderer)) {
-        SDL_Log("Couldn't create window and renderer: %s\n", SDL_GetError());
+    if (!SDL_CreateWindowAndRenderer("testclipboard", 640, 480, SDL_WINDOW_RESIZABLE, &window, &renderer)) {
+        SDL_Log("Couldn't create window and renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
     return SDL_APP_CONTINUE;
@@ -60,21 +61,30 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
         if (event->key.key == SDLK_ESCAPE) {
             return SDL_APP_SUCCESS;
         }
-        if (event->key.key == SDLK_C && event->key.mod & SDL_KMOD_CTRL) {
-            SDL_SetClipboardData(ClipboardDataCallback, NULL, NULL, mime_types, SDL_arraysize(mime_types));
-            break;
+        if (event->key.key == SDLK_C) {
+            if (event->key.mod & SDL_KMOD_CTRL) {
+                SDL_SetClipboardData(ClipboardDataCallback, NULL, NULL, mime_types, SDL_arraysize(mime_types));
+            } else if (event->key.mod & SDL_KMOD_ALT) {
+                SDL_ClearClipboardData();
+            }
+        } else if (event->key.key == SDLK_P) {
+            if (event->key.mod & SDL_KMOD_CTRL) {
+                SDL_SetPrimarySelectionText("SDL Primary Selection Text!");
+            } else if (event->key.mod & SDL_KMOD_ALT) {
+                SDL_SetPrimarySelectionText(NULL);
+            }
         }
         break;
 
     case SDL_EVENT_CLIPBOARD_UPDATE:
         if (event->clipboard.num_mime_types > 0) {
             int i;
-            SDL_Log("Clipboard updated:\n");
+            SDL_Log("Clipboard updated:");
             for (i = 0; event->clipboard.mime_types[i]; ++i) {
-                SDL_Log("    %s\n", event->clipboard.mime_types[i]);
+                SDL_Log("    %s", event->clipboard.mime_types[i]);
             }
         } else {
-            SDL_Log("Clipboard cleared\n");
+            SDL_Log("Clipboard cleared");
         }
         break;
 
@@ -90,10 +100,33 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
 
 static float PrintClipboardText(float x, float y, const char *mime_type)
 {
-    void *data = SDL_GetClipboardData(mime_type, NULL);
+    size_t size;
+    void *data = SDL_GetClipboardData(mime_type, &size);
     if (data) {
-        SDL_RenderDebugText(renderer, x, y, (const char *)data);
+        char *text = (char *)data;
+        if (size > 2 && text[2] == '\0') {
+            /* UCS-4 data */
+            text = (char *)SDL_iconv_string("UTF-8", "UCS-4", data, size+4);
+        } else if (size > 1 && text[1] == '\0') {
+            /* UCS-2 data */
+            text = (char *)SDL_iconv_string("UTF-8", "UCS-2", data, size+2);
+        }
+        if (text) {
+            SDL_RenderDebugText(renderer, x, y, text);
+        }
+        if (text != data) {
+            SDL_free(text);
+        }
         SDL_free(data);
+        return SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE + 2.0f;
+    }
+    return 0.0f;
+}
+
+static float PrintPrimarySelectionText(float x, float y)
+{
+    if (SDL_HasPrimarySelectionText()) {
+        SDL_RenderDebugText(renderer, x, y, SDL_GetPrimarySelectionText());
         return SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE + 2.0f;
     }
     return 0.0f;
@@ -102,39 +135,37 @@ static float PrintClipboardText(float x, float y, const char *mime_type)
 static float PrintClipboardImage(float x, float y, const char *mime_type)
 {
     /* We don't actually need to read this data each frame, but this is a simple example */
-    if (SDL_strcmp(mime_type, "image/bmp") == 0) {
-        size_t size;
-        void *data = SDL_GetClipboardData(mime_type, &size);
-        if (data) {
-            float w = 0.0f, h = 0.0f;
-            bool rendered = false;
-            SDL_IOStream *stream = SDL_IOFromConstMem(data, size);
-            if (stream) {
-                SDL_Surface *surface = SDL_LoadBMP_IO(stream, false);
-                if (surface) {
-                    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
-                    if (texture) {
-                        SDL_GetTextureSize(texture, &w, &h);
+    size_t size;
+    void *data = SDL_GetClipboardData(mime_type, &size);
+    if (data) {
+        float w = 0.0f, h = 0.0f;
+        bool rendered = false;
+        SDL_IOStream *stream = SDL_IOFromConstMem(data, size);
+        if (stream) {
+            SDL_Surface *surface = SDL_LoadSurface_IO(stream, false);
+            if (surface) {
+                SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+                if (texture) {
+                    SDL_GetTextureSize(texture, &w, &h);
 
-                        SDL_FRect dst = { x, y, w, h };
-                        rendered = SDL_RenderTexture(renderer, texture, NULL, &dst);
-                        SDL_DestroyTexture(texture);
-                    }
-                    SDL_DestroySurface(surface);
+                    SDL_FRect dst = { x, y, w, h };
+                    rendered = SDL_RenderTexture(renderer, texture, NULL, &dst);
+                    SDL_DestroyTexture(texture);
                 }
-                SDL_CloseIO(stream);
+                SDL_DestroySurface(surface);
             }
-            if (!rendered) {
-                SDL_RenderDebugText(renderer, x, y, SDL_GetError());
-            }
-            SDL_free(data);
-            return h + 2.0f;
+            SDL_CloseIO(stream);
         }
+        if (!rendered) {
+            SDL_RenderDebugText(renderer, x, y, SDL_GetError());
+        }
+        SDL_free(data);
+        return h + 2.0f;
     }
     return 0.0f;
 }
 
-static void PrintClipboardContents(float x, float y)
+static float PrintClipboardContents(float x, float y)
 {
     char **clipboard_mime_types = SDL_GetClipboardMimeTypes(NULL);
     if (clipboard_mime_types) {
@@ -152,6 +183,8 @@ static void PrintClipboardContents(float x, float y)
         }
         SDL_free(clipboard_mime_types);
     }
+
+    return y;
 }
 
 SDL_AppResult SDL_AppIterate(void *appstate)
@@ -162,12 +195,20 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     float x = 4.0f;
     float y = 4.0f;
-    SDL_RenderDebugText(renderer, x, y, "Press Ctrl+C to copy content to the clipboard");
+    SDL_RenderDebugText(renderer, x, y, "Press Ctrl+C to copy content to the clipboard (Alt+C to clear)");
+    y += SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * 2;
+    SDL_RenderDebugText(renderer, x, y, "Press Ctrl+P to set the primary selection text (Alt+P to clear)");
     y += SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * 2;
     SDL_RenderDebugText(renderer, x, y, "Clipboard contents:");
     x += SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * 2;
     y += SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE + 2;
-    PrintClipboardContents(x, y);
+    y = PrintClipboardContents(x, y);
+    if (SDL_HasPrimarySelectionText()) {
+        x = 4.0f;
+        SDL_RenderDebugText(renderer, x, y, "Primary selection text contents:");
+        y += SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE + 2;
+        PrintPrimarySelectionText(x + SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * 2, y);
+    }
 
     SDL_RenderPresent(renderer);
 

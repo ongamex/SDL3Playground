@@ -48,7 +48,7 @@ SDL_AppResult SDL_AppInit(void** appstateRaw, int argc, char* argv[])
 
 
 	appState.wnd = SDL_CreateWindow("App test SDL3", 1024, 768, 0);
-	appState.gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
+	appState.gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL); // "direct3d12"
 
 	bool succ = SDL_ClaimWindowForGPUDevice(appState.gpuDevice, appState.wnd);
 

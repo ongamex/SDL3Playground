@@ -1,5 +1,5 @@
 /*
- * This example code loads two .wav files, puts them an audio streams and
+ * This example code loads two .wav files, puts them in audio streams and
  * binds them for playback, repeating both sounds on loop. This shows several
  * streams mixing into a single playback device.
  *
@@ -65,10 +65,11 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
         return SDL_APP_FAILURE;
     }
 
-    if (!SDL_CreateWindowAndRenderer("examples/audio/multiple-streams", 640, 480, 0, &window, &renderer)) {
+    if (!SDL_CreateWindowAndRenderer("examples/audio/multiple-streams", 640, 480, SDL_WINDOW_RESIZABLE, &window, &renderer)) {
         SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
+    SDL_SetRenderLogicalPresentation(renderer, 640, 480, SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
     /* open the default audio device in whatever format it prefers; our audio streams will adjust to it. */
     audio_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
@@ -104,7 +105,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         /* If less than a full copy of the audio is queued for playback, put another copy in there.
            This is overkill, but easy when lots of RAM is cheap. One could be more careful and
            queue less at a time, as long as the stream doesn't run dry.  */
-        if (SDL_GetAudioStreamAvailable(sounds[i].stream) < ((int) sounds[i].wav_data_len)) {
+        if (SDL_GetAudioStreamQueued(sounds[i].stream) < ((int) sounds[i].wav_data_len)) {
             SDL_PutAudioStreamData(sounds[i].stream, sounds[i].wav_data, (int) sounds[i].wav_data_len);
         }
     }

@@ -23,7 +23,7 @@ static int texture_height = 0;
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
     SDL_Surface *surface = NULL;
-    char *bmp_path = NULL;
+    char *png_path = NULL;
 
     SDL_SetAppMetadata("Example Renderer Geometry", "1.0", "com.example.renderer-geometry");
 
@@ -32,25 +32,26 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
         return SDL_APP_FAILURE;
     }
 
-    if (!SDL_CreateWindowAndRenderer("examples/renderer/geometry", WINDOW_WIDTH, WINDOW_HEIGHT, 0, &window, &renderer)) {
+    if (!SDL_CreateWindowAndRenderer("examples/renderer/geometry", WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_RESIZABLE, &window, &renderer)) {
         SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
+    SDL_SetRenderLogicalPresentation(renderer, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
     /* Textures are pixel data that we upload to the video hardware for fast drawing. Lots of 2D
        engines refer to these as "sprites." We'll do a static texture (upload once, draw many
        times) with data from a bitmap file. */
 
     /* SDL_Surface is pixel data the CPU can access. SDL_Texture is pixel data the GPU can access.
-       Load a .bmp into a surface, move it to a texture from there. */
-    SDL_asprintf(&bmp_path, "%ssample.bmp", SDL_GetBasePath());  /* allocate a string of the full file path */
-    surface = SDL_LoadBMP(bmp_path);
+       Load a .png into a surface, move it to a texture from there. */
+    SDL_asprintf(&png_path, "%ssample.png", SDL_GetBasePath());  /* allocate a string of the full file path */
+    surface = SDL_LoadPNG(png_path);
     if (!surface) {
         SDL_Log("Couldn't load bitmap: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
-    SDL_free(bmp_path);  /* done with this, the file is loaded. */
+    SDL_free(png_path);  /* done with this, the file is loaded. */
 
     texture_width = surface->w;
     texture_height = surface->h;
@@ -141,7 +142,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     /* we need one more vertex, since the two triangles can share two of them. */
     vertices[3].position.x = 600.0f;
     vertices[3].position.y = 150.0f;
-    vertices[3].color.r = vertices[0].color.g = vertices[0].color.b = vertices[0].color.a = 1.0f;
+    vertices[3].color.r = vertices[3].color.g = vertices[3].color.b = vertices[3].color.a = 1.0f;
     vertices[3].tex_coord.x = 1.0f;
     vertices[3].tex_coord.y = 1.0f;
 

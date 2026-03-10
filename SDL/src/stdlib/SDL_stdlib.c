@@ -140,12 +140,6 @@ double SDL_copysign(double x, double y)
     return copysign(x, y);
 #elif defined(HAVE__COPYSIGN)
     return _copysign(x, y);
-#elif defined(__WATCOMC__) && defined(__386__)
-    // this is nasty as hell, but it works..
-    unsigned int *xi = (unsigned int *)&x,
-                 *yi = (unsigned int *)&y;
-    xi[1] = (yi[1] & 0x80000000) | (xi[1] & 0x7fffffff);
-    return x;
 #else
     return SDL_uclibc_copysign(x, y);
 #endif // HAVE_COPYSIGN
@@ -533,9 +527,10 @@ void *SDL_aligned_alloc(size_t alignment, size_t size)
 {
     size_t padding;
     Uint8 *result = NULL;
+    size_t requested_size = size;
 
-    if (alignment < sizeof(void*)) {
-        alignment = sizeof(void*);
+    if (alignment < sizeof(void *)) {
+        alignment = sizeof(void *);
     }
     padding = (alignment - (size % alignment));
 
@@ -552,6 +547,11 @@ void *SDL_aligned_alloc(size_t alignment, size_t size)
 
             // Store the original pointer right before the returned value
             SDL_memcpy(result - sizeof(original), &original, sizeof(original));
+
+            // Initialize the padding to zero
+            if (padding > 0) {
+                SDL_memset(result + requested_size, 0, padding);
+            }
         }
     }
     return result;

@@ -29,6 +29,13 @@
 
 #ifdef SDL_VIDEO_DRIVER_KMSDRM_DYNAMIC
 
+SDL_ELF_NOTE_DLOPEN(
+    "video-kmsdrm",
+    "Support for KMSDRM",
+    SDL_ELF_NOTE_DLOPEN_PRIORITY_SUGGESTED,
+    SDL_VIDEO_DRIVER_KMSDRM_DYNAMIC
+)
+
 typedef struct
 {
     void *lib;
@@ -59,9 +66,9 @@ static void *KMSDRM_GetSym(const char *fnname, int *pHasModule, bool required)
 
 #if DEBUG_DYNAMIC_KMSDRM
     if (fn)
-        SDL_Log("KMSDRM: Found '%s' in %s (%p)\n", fnname, kmsdrmlibs[i].libname, fn);
+        SDL_Log("KMSDRM: Found '%s' in %s (%p)", fnname, kmsdrmlibs[i].libname, fn);
     else
-        SDL_Log("KMSDRM: Symbol '%s' NOT FOUND!\n", fnname);
+        SDL_Log("KMSDRM: Symbol '%s' NOT FOUND!", fnname);
 #endif
 
     if (!fn && required) {

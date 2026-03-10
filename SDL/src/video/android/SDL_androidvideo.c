@@ -142,7 +142,6 @@ static SDL_VideoDevice *Android_CreateDevice(void)
     device->HasScreenKeyboardSupport = Android_HasScreenKeyboardSupport;
     device->ShowScreenKeyboard = Android_ShowScreenKeyboard;
     device->HideScreenKeyboard = Android_HideScreenKeyboard;
-    device->IsScreenKeyboardShown = Android_IsScreenKeyboardShown;
 
     // Clipboard
     device->SetClipboardText = Android_SetClipboardText;
@@ -157,7 +156,8 @@ static SDL_VideoDevice *Android_CreateDevice(void)
 VideoBootStrap Android_bootstrap = {
     ANDROID_VID_DRIVER_NAME, "SDL Android video driver",
     Android_CreateDevice,
-    Android_ShowMessageBox
+    Android_ShowMessageBox,
+    false
 };
 
 bool Android_VideoInit(SDL_VideoDevice *_this)

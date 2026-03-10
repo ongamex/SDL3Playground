@@ -10,7 +10,7 @@
   freely.
 */
 
-/* Simple program: picks the offscreen backend and renders each frame to a bmp */
+/* Simple program: picks the offscreen backend and renders each frame to a png */
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -47,17 +47,17 @@ static void draw(void)
     SDL_RenderPresent(renderer);
 }
 
-static void save_surface_to_bmp(void)
+static void save_surface_to_png(void)
 {
     SDL_Surface *surface;
     char file[128];
 
     surface = SDL_RenderReadPixels(renderer, NULL);
 
-    (void)SDL_snprintf(file, sizeof(file), "SDL_window%" SDL_PRIs32 "-%8.8d.bmp",
+    (void)SDL_snprintf(file, sizeof(file), "SDL_window%" SDL_PRIs32 "-%8.8d.png",
                        SDL_GetWindowID(window), ++frame_number);
 
-    SDL_SaveBMP(surface, file);
+    SDL_SavePNG(surface, file);
     SDL_DestroySurface(surface);
 }
 
@@ -77,7 +77,7 @@ static void loop(void)
     }
 
     draw();
-    save_surface_to_bmp();
+    save_surface_to_png();
 
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     if (done) {
@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
     /* Force the offscreen renderer, if it cannot be created then fail out */
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
-        SDL_Log("Couldn't initialize the offscreen video driver: %s\n",
+        SDL_Log("Couldn't initialize the offscreen video driver: %s",
                 SDL_GetError());
         return 1;
     }
@@ -117,14 +117,14 @@ int main(int argc, char *argv[])
     window = SDL_CreateWindow("Offscreen Test", width, height, 0);
 
     if (!window) {
-        SDL_Log("Couldn't create window: %s\n", SDL_GetError());
+        SDL_Log("Couldn't create window: %s", SDL_GetError());
         return 1;
     }
 
     renderer = SDL_CreateRenderer(window, NULL);
 
     if (!renderer) {
-        SDL_Log("Couldn't create renderer: %s\n",
+        SDL_Log("Couldn't create renderer: %s",
                 SDL_GetError());
         return 1;
     }
@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
     done = 0;
 #endif
 
-    SDL_Log("Rendering %u frames offscreen\n", max_frames);
+    SDL_Log("Rendering %u frames offscreen", max_frames);
 
 #ifdef SDL_PLATFORM_EMSCRIPTEN
     emscripten_set_main_loop(loop, 0, 1);
@@ -152,7 +152,7 @@ int main(int argc, char *argv[])
             now = SDL_GetTicks();
             if (now > then) {
                 double fps = ((double)frames * 1000) / (now - then);
-                SDL_Log("Frames remaining: %" SDL_PRIu32 " rendering at %2.2f frames per second\n", max_frames - frames, fps);
+                SDL_Log("Frames remaining: %" SDL_PRIu32 " rendering at %2.2f frames per second", max_frames - frames, fps);
             }
         }
     }

@@ -70,13 +70,13 @@ static bool HIDAPI_DriverCombined_OpenJoystick(SDL_HIDAPI_Device *device, SDL_Jo
     for (i = 0; i < device->num_children; ++i) {
         SDL_HIDAPI_Device *child = device->children[i];
         if (!child->driver->OpenJoystick(child, joystick)) {
+            child->broken = true;
+
             while (i-- > 0) {
                 child = device->children[i];
                 child->driver->CloseJoystick(child, joystick);
             }
-            if (serial) {
-                SDL_free(serial);
-            }
+            SDL_free(serial);
             return false;
         }
 
@@ -100,9 +100,7 @@ static bool HIDAPI_DriverCombined_OpenJoystick(SDL_HIDAPI_Device *device, SDL_Jo
     }
 
     // Update the joystick with the combined serial numbers
-    if (joystick->serial) {
-        SDL_free(joystick->serial);
-    }
+    SDL_free(joystick->serial);
     joystick->serial = serial;
 
     return true;

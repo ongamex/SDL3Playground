@@ -54,19 +54,25 @@ getprioritystr(SDL_ThreadPriority priority)
     return "???";
 }
 
-static int SDLCALL
-ThreadFunc(void *data)
+static int SDLCALL CheckMainThread(void *data)
+{
+    bool *thread_is_main = (bool *)data;
+    *thread_is_main = SDL_IsMainThread();
+    return 0;
+}
+
+static int SDLCALL ThreadFunc(void *data)
 {
     SDL_ThreadPriority prio = SDL_THREAD_PRIORITY_NORMAL;
 
     SDL_SetTLS(&tls, "baby thread", NULL);
-    SDL_Log("Started thread %s: My thread id is %" SDL_PRIu64 ", thread data = %s\n",
+    SDL_Log("Started thread %s: My thread id is %" SDL_PRIu64 ", thread data = %s",
             (char *)data, SDL_GetCurrentThreadID(), (const char *)SDL_GetTLS(&tls));
     while (SDL_GetAtomicInt(&alive)) {
-        SDL_Log("Thread '%s' is alive!\n", (char *)data);
+        SDL_Log("Thread '%s' is alive!", (char *)data);
 
         if (testprio) {
-            SDL_Log("SDL_SetCurrentThreadPriority(%s):%d\n", getprioritystr(prio), SDL_SetCurrentThreadPriority(prio));
+            SDL_Log("SDL_SetCurrentThreadPriority(%s):%d", getprioritystr(prio), SDL_SetCurrentThreadPriority(prio));
             if (++prio > SDL_THREAD_PRIORITY_TIME_CRITICAL) {
                 prio = SDL_THREAD_PRIORITY_LOW;
             }
@@ -74,14 +80,14 @@ ThreadFunc(void *data)
 
         SDL_Delay(1 * 1000);
     }
-    SDL_Log("Thread '%s' exiting!\n", (char *)data);
+    SDL_Log("Thread '%s' exiting!", (char *)data);
     return 0;
 }
 
 static void
 killed(int sig)
 {
-    SDL_Log("Killed with SIGTERM, waiting 5 seconds to exit\n");
+    SDL_Log("Killed with SIGTERM, waiting 5 seconds to exit");
     SDL_Delay(5 * 1000);
     SDL_SetAtomicInt(&alive, 0);
     SDL_WaitThread(thread, NULL);
@@ -91,6 +97,7 @@ killed(int sig)
 int main(int argc, char *argv[])
 {
     int i;
+    bool child_is_main = true;
 
     /* Initialize test framework */
     state = SDLTest_CommonCreateState(argv, 0);
@@ -112,45 +119,57 @@ int main(int argc, char *argv[])
         if (consumed <= 0) {
             static const char *options[] = { "[--prio]", NULL };
             SDLTest_CommonLogUsage(state, argv[0], options);
-            exit(1);
+            quit(1);
         }
 
         i += consumed;
     }
 
-    /* Load the SDL library */
-    if (!SDL_Init(0)) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize SDL: %s\n", SDL_GetError());
-        return 1;
+    /* Check main thread */
+    if (!SDL_IsMainThread()) {
+        SDL_Log("SDL_IsMainThread() returned false for the main thread");
+        quit(1);
+    }
+
+    thread = SDL_CreateThread(CheckMainThread, "CheckMainThread", &child_is_main);
+    if (!thread) {
+        SDL_Log("Couldn't create thread: %s", SDL_GetError());
+        quit(1);
+    }
+    SDL_WaitThread(thread, NULL);
+
+    if (child_is_main) {
+        SDL_Log("SDL_IsMainThread() returned true for a child thread");
+        quit(1);
     }
 
     if (SDL_GetEnvironmentVariable(SDL_GetEnvironment(), "SDL_TESTS_QUICK") != NULL) {
         SDL_Log("Not running slower tests");
-        SDL_Quit();
+        quit(0);
         return 0;
     }
 
     SDL_SetTLS(&tls, "main thread", NULL);
-    SDL_Log("Main thread data initially: %s\n", (const char *)SDL_GetTLS(&tls));
+    SDL_Log("Main thread data initially: %s", (const char *)SDL_GetTLS(&tls));
 
     SDL_SetAtomicInt(&alive, 1);
     thread = SDL_CreateThread(ThreadFunc, "One", "#1");
     if (!thread) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create thread: %s\n", SDL_GetError());
+        SDL_Log("Couldn't create thread: %s", SDL_GetError());
         quit(1);
     }
     SDL_Delay(5 * 1000);
-    SDL_Log("Waiting for thread #1\n");
+    SDL_Log("Waiting for thread #1");
     SDL_SetAtomicInt(&alive, 0);
     SDL_WaitThread(thread, NULL);
 
-    SDL_Log("Main thread data finally: %s\n", (const char *)SDL_GetTLS(&tls));
+    SDL_Log("Main thread data finally: %s", (const char *)SDL_GetTLS(&tls));
 
     SDL_SetAtomicInt(&alive, 1);
     (void)signal(SIGTERM, killed);
     thread = SDL_CreateThread(ThreadFunc, "Two", "#2");
     if (!thread) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create thread: %s\n", SDL_GetError());
+        SDL_Log("Couldn't create thread: %s", SDL_GetError());
         quit(1);
     }
     (void)raise(SIGTERM);

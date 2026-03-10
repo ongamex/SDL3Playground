@@ -12,16 +12,20 @@
 /* Sample program:  Create open and save dialogs. */
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_test.h>
 
-const SDL_DialogFileFilter filters[3] = {
+const SDL_DialogFileFilter filters[] = {
     { "All files", "*" },
+    { "SVI Session Indexes", "index;svi-index;index.pb" },
     { "JPG images", "jpg;jpeg" },
     { "PNG images", "png" }
 };
 
-static void SDLCALL callback(void* userdata, const char* const* files, int filter) {
+static void SDLCALL callback(void *userdata, const char * const *files, int filter) {
+    char **saved_path = userdata;
+
     if (files) {
         const char* filter_name = "(filter fetching unsupported)";
 
@@ -33,15 +37,39 @@ static void SDLCALL callback(void* userdata, const char* const* files, int filte
             }
         }
 
-        SDL_Log("Filter used: '%s'\n", filter_name);
+        SDL_Log("Filter used: '%s'", filter_name);
+
+        if (*files && saved_path) {
+            *saved_path = SDL_strdup(*files);
+            /* Create the file */
+            SDL_IOStream *stream = SDL_IOFromFile(*saved_path, "w");
+            SDL_CloseIO(stream);
+        }
 
         while (*files) {
-            SDL_Log("'%s'\n", *files);
+            SDL_Log("'%s'", *files);
             files++;
         }
     } else {
-        SDL_Log("Error: %s\n", SDL_GetError());
+        SDL_Log("Error: %s", SDL_GetError());
     }
+}
+
+char *concat_strings(const char *a, const char *b)
+{
+    char *out = NULL;
+
+    if (a != NULL && b != NULL) {
+        const size_t out_size = SDL_strlen(a) + SDL_strlen(b) + 1;
+        out = (char *)SDL_malloc(out_size);
+        if (out) {
+            *out = '\0';
+            SDL_strlcat(out, a, out_size);
+            SDL_strlcat(out, b, out_size);
+        }
+    }
+
+    return out;
 }
 
 int main(int argc, char *argv[])
@@ -53,8 +81,9 @@ int main(int argc, char *argv[])
     const SDL_FRect save_file_rect = { 50, 290, 220, 140 };
     const SDL_FRect open_folder_rect = { 370, 50, 220, 140 };
     int i;
+    const char *default_filename = "Untitled.index";
     const char *initial_path = NULL;
-    const int nfilters = sizeof(filters) / sizeof(*filters);
+    char *last_saved_path = NULL;
 
     /* Initialize test framework */
     state = SDLTest_CommonCreateState(argv, 0);
@@ -82,7 +111,7 @@ int main(int argc, char *argv[])
         return 1;
     }
     if (!SDL_CreateWindowAndRenderer("testdialog", 640, 480, 0, &w, &r)) {
-        SDL_Log("Failed to create window and/or renderer: %s\n", SDL_GetError());
+        SDL_Log("Failed to create window and/or renderer: %s", SDL_GetError());
         SDL_Quit();
         return 1;
     }
@@ -90,7 +119,7 @@ int main(int argc, char *argv[])
     initial_path = SDL_GetUserFolder(SDL_FOLDER_HOME);
 
     if (!initial_path) {
-        SDL_Log("Will not use an initial path, couldn't get the home directory path: %s\n", SDL_GetError());
+        SDL_Log("Will not use an initial path, couldn't get the home directory path: %s", SDL_GetError());
     }
 
     while (1) {
@@ -112,11 +141,18 @@ int main(int argc, char *argv[])
                  * - Nonzero if the user is allowed to choose multiple entries (not for SDL_ShowSaveFileDialog)
                  */
                 if (SDL_PointInRectFloat(&p, &open_file_rect)) {
-                    SDL_ShowOpenFileDialog(callback, NULL, w, filters, nfilters, initial_path, 1);
+                    SDL_ShowOpenFileDialog(callback, NULL, w, filters, SDL_arraysize(filters), initial_path, 1);
                 } else if (SDL_PointInRectFloat(&p, &open_folder_rect)) {
                     SDL_ShowOpenFolderDialog(callback, NULL, w, initial_path, 1);
                 } else if (SDL_PointInRectFloat(&p, &save_file_rect)) {
-                    SDL_ShowSaveFileDialog(callback, NULL, w, filters, nfilters, initial_path);
+                    char *save_path = NULL;
+                    if (last_saved_path) {
+                        save_path = SDL_strdup(last_saved_path);
+                    } else {
+                        save_path = concat_strings(initial_path, default_filename);
+                    }
+                    SDL_ShowSaveFileDialog(callback, &last_saved_path, w, filters, SDL_arraysize(filters), save_path ? save_path : default_filename);
+                    SDL_free(save_path);
                 }
             }
         }
@@ -145,6 +181,7 @@ int main(int argc, char *argv[])
         SDL_RenderPresent(r);
     }
 
+    SDL_free(last_saved_path);
     SDLTest_CleanupTextDrawing();
     SDL_DestroyRenderer(r);
     SDL_DestroyWindow(w);
