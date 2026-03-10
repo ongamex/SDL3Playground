@@ -175,7 +175,10 @@ SDL_AppResult SDL_AppInit(void** appstateRaw, int argc, char* argv[])
 		SDL_EndGPUCopyPass(copyPass);
 
 		// Execute the pass:
-		SDL_SubmitGPUCommandBuffer(cmdbuf);
+		SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmdbuf);
+		SDL_WaitForGPUFences(appState.gpuDevice, true, &fence, 1);
+		SDL_ReleaseGPUFence(appState.gpuDevice, fence);
+		fence = nullptr;
 	}
 
 	if (!succ) {

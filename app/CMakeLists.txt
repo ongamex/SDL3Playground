@@ -1,5 +1,4 @@
 
-
 set(SHADERS
 	"./triangle.vert"
 	"./triangle.frag"
@@ -19,4 +18,8 @@ foreach(SHADER ${SHADERS})
 		${MY_GLSLC_PATH} ${CMAKE_CURRENT_LIST_DIR}/${SHADER} -o $<TARGET_FILE_DIR:app>/${SHADER}.spv
 	)
 endforeach()
+
+add_custom_command(TARGET app POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3-shared> $<TARGET_FILE_DIR:app>/
+)
 
