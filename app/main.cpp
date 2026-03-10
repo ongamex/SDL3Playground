@@ -7,6 +7,12 @@
 #include <vector>
 #include <fstream>
 
+#if 0
+	#define SHDR_SUFF 
+#else
+	#define SHDR_SUFF ".slang"
+#endif
+
 std::vector<char> readFile(const char* const filename)
 {
 	std::vector<char> data;
@@ -54,7 +60,7 @@ SDL_AppResult SDL_AppInit(void** appstateRaw, int argc, char* argv[])
 
 	// Shaders:
 	{
-		std::vector<char> vertShdrCode = readFile("triangle.vert.spv");
+		std::vector<char> vertShdrCode = readFile("triangle.vert.spv" SHDR_SUFF);
 
 		SDL_GPUShaderCreateInfo ci = { 0 };
 		ci.code_size = vertShdrCode.size();
@@ -72,7 +78,7 @@ SDL_AppResult SDL_AppInit(void** appstateRaw, int argc, char* argv[])
 	}
 
 	{
-		std::vector<char> fragShdrCode = readFile("triangle.frag.spv");
+		std::vector<char> fragShdrCode = readFile("triangle.frag.spv" SHDR_SUFF);
 
 		SDL_GPUShaderCreateInfo ci = { 0 };
 		ci.code_size = fragShdrCode.size();
